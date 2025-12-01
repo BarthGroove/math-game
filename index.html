@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aventura dos Números</title>
+    
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@300;400;600;700&display=swap');
+
+        body {
+            font-family: 'Fredoka', sans-serif;
+            background-color: #f0f9ff;
+            /* overflow: hidden;  <-- Removi isso para permitir rolar a tela se precisar no celular */
+        }
+
+        .bounce-anim { animation: bounce 0.5s cubic-bezier(0.36, 0, 0.66, -0.56) infinite alternate; }
+        @keyframes bounce { 0% { transform: translateY(0); } 100% { transform: translateY(-10px); } }
+
+        .pop-in { animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        @keyframes popIn { 0% { transform: scale(0.5); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+
+        .correct-answer {
+            animation: successPulse 0.5s ease-out;
+            background-color: #4ade80 !important;
+            border-color: #22c55e !important;
+            color: white !important;
+        }
+
+        .wrong-answer {
+            animation: shake 0.5s ease-in-out;
+            background-color: #f87171 !important;
+            border-color: #ef4444 !important;
+            color: white !important;
+        }
+
+        @keyframes successPulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
+        @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+
+        .confetti {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background-color: #f00;
+            animation: fall linear forwards;
+            z-index: 50;
+            pointer-events: none;
+        }
+        @keyframes fall { to { transform: translateY(100vh) rotate(720deg); } }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // Dados dos Níveis
+        const LEVELS = [
+            { id: 1, name: "Floresta da Soma", type: "add", icon: "plus", color: "bg-green-500", unlockScore: 0 },
+            { id: 2, name: "Praia da Subtração", type: "sub", icon: "minus", color: "bg-blue-500", unlockScore: 80 },
+            { id: 3, name: "Montanha da Multiplicação", type: "mult", icon: "x", color: "bg-purple-500", unlockScore: 160 },
+            { id: 4, name: "Espaço do Desafio", type: "mix", icon: "zap", color: "bg-yellow-500", unlockScore: 240 }
+        ];
+
+        // Componente de Ícones
+        const Icon = ({ name, size = 24, className }) => {
+            const icons = {
+                plus: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>,
+                minus: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="5" y1="12" x2="19" y2="12"></line></svg>,
+                x: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>,
+                zap: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={className}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>,
+                lock: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>,
+                star: <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>,
+                home: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>,
+                refresh: <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+            };
+            return icons[name] || null;
+        };
+
+        // Função de Confete
+        const triggerConfetti = () => {
+            const colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff'];
+            for (let i = 0; i < 50; i++) {
+                const confetti = document.createElement('div');
+                confetti.classList.add('confetti');
+                confetti.style.left = Math.random() * 100 + 'vw';
+                confetti.style.top = '-10px';
+                confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+                confetti.style.animationDuration = (Math.random() * 3 + 2) + 's';
+                document.body.appendChild(confetti);
+                setTimeout(() => confetti.remove(), 5000);
+            }
+        };
+
+        const App = () => {
+            const [gameState, setGameState] = useState('menu');
+            const [currentLevel, setCurrentLevel] = useState(null);
+            const [unlockedLevels, setUnlockedLevels] = useState([1]);
+            const [score, setScore] = useState(0);
+            const [timeLeft, setTimeLeft] = useState(0);
+            const [question, setQuestion] = useState(null);
+            const [feedback, setFeedback] = useState(null);
+            const [totalQuestionsAnswered, setTotalQuestionsAnswered] = useState(0);
+            const [correctCount, setCorrectCount] = useState(0);
+            
+            const MAX_TIME = 15;
+            const QUESTIONS_PER_LEVEL = 5;
+
+            const generateQuestion = (levelType) => {
+                let n1, n2, ans, symbol;
+                switch(levelType) {
+                    case 'add': n1 = Math.floor(Math.random() * 10) + 1; n2 = Math.floor(Math.random() * 10) + 1; ans = n1 + n2; symbol = '+'; break;
+                    case 'sub': n1 = Math.floor(Math.random() * 15) + 5; n2 = Math.floor(Math.random() * n1); ans = n1 - n2; symbol = '-'; break;
+                    case 'mult': n1 = Math.floor(Math.random() * 9) + 1; n2 = Math.floor(Math.random() * 5) + 1; ans = n1 * n2; symbol = '×'; break;
+                    case 'mix': const types = ['add', 'sub', 'mult']; return generateQuestion(types[Math.floor(Math.random() * types.length)]);
+                }
+                let options = new Set();
+                options.add(ans);
+                while(options.size < 3) {
+                    let fake = ans + (Math.floor(Math.random() * 10) - 5);
+                    if(fake >= 0 && fake !== ans) options.add(fake);
+                }
+                return { n1, n2, ans, symbol, options: Array.from(options).sort(() => Math.random() - 0.5) };
+            };
+
+            const startGame = (level) => {
+                setCurrentLevel(level); setScore(0); setCorrectCount(0); setTotalQuestionsAnswered(0);
+                setGameState('playing'); nextQuestion(level.type);
+            };
+
+            const nextQuestion = (type) => {
+                setFeedback(null); setTimeLeft(MAX_TIME); setQuestion(generateQuestion(type));
+            };
+
+            useEffect(() => {
+                if (gameState !== 'playing' || feedback) return;
+                const timer = setInterval(() => {
+                    setTimeLeft((prev) => {
+                        if (prev <= 0.1) { handleAnswer(null, true); return 0; }
+                        return prev - 0.1;
+                    });
+                }, 100);
+                return () => clearInterval(timer);
+            }, [gameState, feedback, timeLeft]);
+
+            const handleAnswer = (selectedOption, timeout = false) => {
+                if (feedback) return;
+                const isCorrect = !timeout && selectedOption === question.ans;
+                setFeedback(isCorrect ? 'correct' : 'wrong');
+                if (isCorrect) { setScore(s => s + 10 + Math.floor(timeLeft)); setCorrectCount(c => c + 1); triggerConfetti(); }
+                setTimeout(() => {
+                    const nextTotal = totalQuestionsAnswered + 1;
+                    setTotalQuestionsAnswered(nextTotal);
+                    if (nextTotal >= QUESTIONS_PER_LEVEL) endLevel(isCorrect ? score + 10 : score);
+                    else nextQuestion(currentLevel.type);
+                }, 1500);
+            };
+
+            const endLevel = (finalScore) => {
+                setGameState('result');
+                if (correctCount + (feedback === 'correct' ? 1 : 0) >= 3) {
+                    const nextLevelId = currentLevel.id + 1;
+                    if (!unlockedLevels.includes(nextLevelId) && nextLevelId <= 4) setUnlockedLevels([...unlockedLevels, nextLevelId]);
+                }
+            };
+
+            // --- AQUI ESTÁ A MUDANÇA NO MENU ---
+            if (gameState === 'menu') {
+                return (
+                    // Adicionei um estilo inline aqui para a imagem de fundo
+                    <div 
+                        className="min-h-screen flex flex-col items-center justify-center p-4"
+                        style={{
+                            // O "linear-gradient" cria uma sombra escura transparente sobre a imagem para o texto ficar legível
+                            // Se a imagem estiver na mesma pasta, é só colocar o nome dela:
+							backgroundImage: "linear-gradient(rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.5)), url('fundo.jpg')",
+                            backgroundSize: 'cover',
+                            backgroundPosition: 'center',
+                            backgroundAttachment: 'fixed'
+                        }}
+                    >
+                        {/* Mudei a cor do título para branco para destacar no fundo escuro */}
+                        <h1 className="text-4xl md:text-6xl font-black text-white mb-8 tracking-wider text-center drop-shadow-lg bounce-anim">
+                            AVENTURA DOS NÚMEROS
+                        </h1>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-2xl">
+                            {LEVELS.map((level) => {
+                                const isUnlocked = unlockedLevels.includes(level.id);
+                                return (
+                                    <button key={level.id} onClick={() => isUnlocked && startGame(level)} disabled={!isUnlocked} className={`relative h-32 md:h-40 rounded-3xl flex items-center p-6 shadow-xl transition-all transform hover:scale-105 active:scale-95 ${isUnlocked ? 'bg-white/90 backdrop-blur-sm cursor-pointer hover:shadow-2xl' : 'bg-gray-200/80 cursor-not-allowed grayscale opacity-80'}`}>
+                                        <div className={`w-20 h-20 rounded-2xl flex items-center justify-center text-white text-3xl shadow-inner ${level.color}`}>{isUnlocked ? <Icon name={level.icon} /> : <Icon name="lock" />}</div>
+                                        <div className="ml-6 text-left"><h2 className="text-2xl font-bold text-gray-800">{level.name}</h2><p className="text-gray-500 font-semibold mt-1">{isUnlocked ? "Toque para jogar!" : "Bloqueado"}</p></div>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                );
+            }
+
+            if (gameState === 'playing' && question) {
+                const progressPct = (timeLeft / MAX_TIME) * 100;
+                let barColor = progressPct < 20 ? 'bg-red-500' : progressPct < 50 ? 'bg-yellow-500' : 'bg-green-500';
+                return (
+                    <div className={`min-h-screen flex flex-col items-center p-4 transition-colors duration-500 ${currentLevel.color.replace('bg-', 'bg-opacity-20 bg-')}`}>
+                        <div className="w-full max-w-lg flex justify-between items-center mb-8 bg-white p-4 rounded-2xl shadow-lg">
+                            <button onClick={() => setGameState('menu')} className="text-gray-500 hover:text-blue-500"><Icon name="home" /></button>
+                            <div className="text-2xl font-black text-yellow-500 flex items-center gap-2"><Icon name="star" className="text-yellow-400 fill-current" />{score}</div>
+                        </div>
+                        <div className="w-full max-w-lg h-6 bg-gray-200 rounded-full mb-8 overflow-hidden border-4 border-white shadow-md"><div className={`h-full transition-all duration-100 ease-linear ${barColor}`} style={{ width: `${progressPct}%` }} /></div>
+                        <div className="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-lg text-center mb-8 pop-in relative overflow-hidden">
+                            <div className="text-gray-400 font-bold uppercase tracking-widest text-sm mb-4">Pergunta {totalQuestionsAnswered + 1} de {QUESTIONS_PER_LEVEL}</div>
+                            <div className="text-7xl font-black text-gray-800 flex justify-center items-center gap-4"><span>{question.n1}</span><span className="text-blue-500">{question.symbol}</span><span>{question.n2}</span><span>=</span><span className="text-gray-300">?</span></div>
+                        </div>
+                        <div className="grid grid-cols-3 gap-4 w-full max-w-lg">
+                            {question.options.map((opt, idx) => {
+                                let btnClass = "bg-white text-gray-700 hover:bg-blue-50";
+                                if (feedback) { if (opt === question.ans) btnClass = "correct-answer"; else if (opt !== question.ans && feedback === 'wrong') btnClass = "opacity-50"; }
+                                return (<button key={idx} onClick={() => handleAnswer(opt)} disabled={!!feedback} className={`h-24 rounded-2xl text-4xl font-bold shadow-lg border-b-8 border-gray-100 transition-all active:border-b-0 active:translate-y-2 ${btnClass}`}>{opt}</button>);
+                            })}
+                        </div>
+                    </div>
+                );
+            }
+
+            if (gameState === 'result') {
+                const passed = correctCount >= 3;
+                return (
+                    <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-purple-100">
+                        <div className="bg-white p-8 rounded-3xl shadow-2xl text-center max-w-md w-full pop-in border-8 border-purple-200">
+                            <div className="mb-6 flex justify-center">{passed ? <div className="w-32 h-32 bg-green-100 rounded-full flex items-center justify-center text-green-500 text-6xl shadow-inner bounce-anim">🏆</div> : <div className="w-32 h-32 bg-red-100 rounded-full flex items-center justify-center text-red-500 text-6xl shadow-inner">😔</div>}</div>
+                            <h2 className="text-4xl font-black text-gray-800 mb-2">{passed ? "Parabéns!" : "Tente de novo!"}</h2>
+                            <p className="text-gray-500 font-medium mb-6 text-lg">Você acertou <span className="text-purple-600 font-bold">{correctCount}</span> de 5 perguntas.</p>
+                            <div className="bg-yellow-50 rounded-xl p-4 mb-8"><div className="text-sm text-yellow-600 font-bold uppercase">Pontuação Final</div><div className="text-5xl font-black text-yellow-500">{score}</div></div>
+                            <div className="flex gap-4 justify-center">
+                                <button onClick={() => setGameState('menu')} className="bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-4 px-6 rounded-xl flex items-center gap-2 transition-transform active:scale-95"><Icon name="home" size={20} /> Menu</button>
+                                <button onClick={() => startGame(currentLevel)} className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-4 px-6 rounded-xl flex items-center gap-2 shadow-lg transition-transform active:scale-95"><Icon name="refresh" size={20} /> Jogar Novamente</button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+            return null;
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
